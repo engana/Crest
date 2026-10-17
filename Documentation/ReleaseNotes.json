@@ -4217,6 +4217,10 @@
     "setup-full-screen-look-choice": {
       "category": "new",
       "message": "Setup on the Mac fills the screen and asks whether your Spaces wear Crest's heraldic banners and crests or a modern gradient and icon, then carries that look through importing, reviewing and making your Spaces yours."
+    },
+    "space-slide-continues-forward": {
+      "category": "fixed",
+      "message": "Pressing Next or Previous Space again while a Space is still sliding carries the slide on from where it is, without stepping back first, including around the ends."
     }
   }
 }
