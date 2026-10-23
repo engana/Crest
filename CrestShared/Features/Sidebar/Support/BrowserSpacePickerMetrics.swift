@@ -41,12 +41,13 @@ struct BrowserSpacePickerMetrics: Equatable, Sendable {
     // MARK: - Actions - Sizing
 
     /// These metrics with the crest, its badge and its clearance drawn `scale`
-    /// times their usual size.
+    /// times their usual size, in whole points. The crest stays an even number
+    /// of points, as its segment is, so it centres on a whole point.
     func scaled(by scale: CGFloat) -> BrowserSpacePickerMetrics {
         BrowserSpacePickerMetrics(
-            iconSize: iconSize * scale,
-            lockSize: lockSize * scale,
-            iconPadding: iconPadding * scale
+            iconSize: 2 * (iconSize * scale / 2).rounded(),
+            lockSize: (lockSize * scale).rounded(),
+            iconPadding: (iconPadding * scale).rounded()
         )
     }
 }

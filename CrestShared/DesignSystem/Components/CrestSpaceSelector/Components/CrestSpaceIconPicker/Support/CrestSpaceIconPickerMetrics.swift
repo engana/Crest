@@ -107,16 +107,23 @@ struct CrestSpaceIconPickerStyle: Hashable, Sendable {
     ///
     /// The track's padding and corners follow the segment's height, so a
     /// smaller track keeps the shape of the full-size one rather than rounding
-    /// off.
+    /// off. Segments come out an even number of points each way and the
+    /// padding a whole one, so a track of any size, and the crests centred in
+    /// it, centre on the same point as the controls beside it.
     func scaled(by scale: CGFloat) -> CrestSpaceIconPickerStyle {
-        let segmentHeight = max(smallestSegment.height, self.segmentHeight * scale)
+        let segmentHeight = max(smallestSegment.height, Self.evenPoints(self.segmentHeight * scale))
         let shape = segmentHeight / self.segmentHeight
         var style = self
-        style.trackPadding = trackPadding * shape
+        style.trackPadding = (trackPadding * shape).rounded()
         style.height = segmentHeight + 2 * style.trackPadding
         style.fixedCornerRadius = fixedCornerRadius.map { $0 * shape }
-        style.minimumSegmentWidth = max(smallestSegment.width, minimumSegmentWidth * scale)
+        style.minimumSegmentWidth = max(smallestSegment.width, Self.evenPoints(minimumSegmentWidth * scale))
         return style
+    }
+
+    /// `length` to the nearest even number of points.
+    private static func evenPoints(_ length: CGFloat) -> CGFloat {
+        2 * (length / 2).rounded()
     }
 
     /// How wide the track is with `spaceCount` Spaces side by side at their
