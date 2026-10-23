@@ -28,18 +28,11 @@ struct CrestSpaceIconPicker<Space: BrowserSpaceIdentifying, SegmentContent: View
     var body: some View {
         HStack(spacing: 0) {
             ForEach(spaces) { space in
-                HStack(spacing: 0) {
-                    reorderableButton(space)
-
-                    if style.showsDividers && space.id != spaces.last?.id {
-                        Divider()
-                            .frame(height: min(CrestSpaceIconPickerMetrics.dividerHeight, segmentSize.height * 0.6))
-                    }
-                }
-                .zIndex(reorder.sourceID == space.id ? 1 : 0)
+                reorderableButton(space)
+                    .zIndex(reorder.sourceID == space.id ? 1 : 0)
             }
         }
-        .padding(CrestSpaceIconPickerMetrics.trackPadding)
+        .padding(style.trackPadding)
         .backgroundPreferenceValue(CrestSpaceIconFramePreference.self) { anchors in
             if let selectionPresentation {
                 GeometryReader { geometry in

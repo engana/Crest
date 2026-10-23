@@ -10,9 +10,6 @@ import CoreGraphics
 struct BrowserSpacePickerMetrics: Equatable, Sendable {
     // MARK: - Static Variables
 
-    /// How far the person's Space icon size can shrink or grow the crest.
-    static let scaleRange: ClosedRange<Double> = 0.5...1.5
-
     /// A pointer shell: a small crest that fills the compact picker's segment
     /// on its own.
     static let pointer = BrowserSpacePickerMetrics(
@@ -42,12 +39,6 @@ struct BrowserSpacePickerMetrics: Equatable, Sendable {
     let iconPadding: CGFloat
 
     // MARK: - Actions - Sizing
-
-    /// A stored Space icon size held to `scaleRange`, or 1 when it is not a
-    /// number.
-    static func scale(_ value: Double) -> CGFloat {
-        value.isFinite ? CGFloat(min(max(value, scaleRange.lowerBound), scaleRange.upperBound)) : 1
-    }
 
     /// These metrics with the crest, its badge and its clearance drawn `scale`
     /// times their usual size.
