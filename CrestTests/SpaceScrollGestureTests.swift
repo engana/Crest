@@ -153,7 +153,7 @@ final class SpaceScrollGestureTests: XCTestCase {
     // drag to arrive. The burst case separately tests coalescing and speed.
     private func track(_ viewport: SpacePagerViewport<Text>, deltaX: CGFloat, token: UInt) -> Bool {
         guard viewport.updateInteractiveMotion(deltaX: deltaX, token: token) else { return false }
-        for _ in 0..<60 { viewport.advanceFrame(interval: 1.0 / 60) }
+        for _ in 0..<60 { viewport.advanceFrame(interval: 1.0 / 60, frame: CACurrentMediaTime()) }
         return true
     }
 

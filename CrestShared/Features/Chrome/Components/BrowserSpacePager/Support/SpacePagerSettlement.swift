@@ -7,6 +7,10 @@ struct SpacePagerSettlement: Equatable {
     let startPosition: CGFloat
     let endPosition: CGFloat
     let generation: UInt
+    /// When the slide begins on Core Animation's clock, for one that takes
+    /// over from a running slide at a chosen frame; nil begins it at the
+    /// commit that installs it.
+    var beginTime: CFTimeInterval?
 
     static let trackingPagesPerSecond: CGFloat = 4
     private static let firstControl = CGPoint(x: 0.27, y: 1)
@@ -69,7 +73,9 @@ struct SpacePagerSettlement: Equatable {
         animation.duration = duration
         // Zero starts at the common rendering commit. A wall-clock start set
         // before SwiftUI layout can expire before the first frame is visible.
-        animation.beginTime = 0
+        animation.beginTime = beginTime ?? 0
+        // A slide given its start holds that start until then, not its end.
+        if beginTime != nil { animation.fillMode = .backwards }
         animation.timingFunction = timingFunction
     }
 

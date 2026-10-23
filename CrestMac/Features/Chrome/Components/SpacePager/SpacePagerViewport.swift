@@ -20,6 +20,15 @@ final class SpacePagerViewport<Content: View>: NSView {
         var commitsSelection: Bool
     }
 
+    /// A slide toward `destination` that begins at the next display frame:
+    /// on from the settling slide heading for `heading`, or from rest.
+    private struct PendingSlide {
+        let destination: UUID
+        let heading: UUID?
+        let step: Int
+        let generation: UInt
+    }
+
     private(set) var spaces: [SpaceModel] = []
     /// What the Spaces were at the last update, kept as values: the models
     /// change in place, so only a snapshot tells an update what moved.
@@ -46,13 +55,18 @@ final class SpacePagerViewport<Content: View>: NSView {
     private var contentTopInsets: [UUID: CGFloat] = [:]
     private var pendingContentTopInsets: [UUID: CGFloat] = [:]
     private var motionDisplayLink: CADisplayLink?
+    /// A slide waiting for the next display frame to begin. The update that
+    /// selects a Space lays out and draws its pages in the commit that ends
+    /// it, which can take several frames; a slide begun in that commit would
+    /// already be that far along when it first shows.
+    private var pendingSlide: PendingSlide?
     /// Which installation of the settling animations finishes the motion. A
     /// slide re-aimed at a new size replaces its animations, and the ones it
     /// replaced must not end it.
     private var settlementEpoch: UInt = 0
     private var maximumTrackingSpeed: CGFloat { bounds.width * SpacePagerSettlement.trackingPagesPerSecond }
-    private lazy var frameObserver = SpacePagerFrameObserver { [weak self] interval in
-        self?.advanceFrame(interval: interval)
+    private lazy var frameObserver = SpacePagerFrameObserver { [weak self] interval, frame in
+        self?.advanceFrame(interval: interval, frame: frame)
     }
     private lazy var gesture: SpacePagerGesture<Content> = {
         @MainActor in SpacePagerGesture(viewport: self)
@@ -122,15 +136,22 @@ final class SpacePagerViewport<Content: View>: NSView {
             // Actual authoritative selection changes supersede native motion;
             // unrelated updates carrying the old ID do not.
             expectedSelection = nil
+            // A slide still waiting for its first frame is already under way:
+            // it starts now, and this selection carries on from where it goes.
+            if let pending = pendingSlide, motion?.generation == pending.generation {
+                pendingSlide = nil
+                startSlide(pending, at: CACurrentMediaTime())
+            }
             if let heading = motion?.settledDestination, !reduceMotion,
-                let step = step(from: heading, to: selectedSpaceID)
+                let step = step(from: heading, to: selectedSpaceID), let generation = motion?.generation
             {
                 // The slide no longer decides the selection, even if it ends
                 // before the continuation starts. Its page is readied now,
                 // with this update, so the continuation's own commit is light.
                 motion?.commitsSelection = false
                 prepareHosts(around: heading, retaining: selectedSpaceID, refreshContent: false)
-                continueSettlingOnScreen(to: selectedSpaceID, from: heading, step: step)
+                pendingSlide = PendingSlide(
+                    destination: selectedSpaceID, heading: heading, step: step, generation: generation)
             } else {
                 cancelMotion()
                 gesture.cancelCurrentGesture()
@@ -240,6 +261,7 @@ final class SpacePagerViewport<Content: View>: NSView {
 
     func beginInteractiveMotion() -> UInt? {
         guard !isInteractionLocked, bounds.width > 0, spaces.count > 1 else { return nil }
+        pendingSlide = nil
         stopPresentationSampling()
         let previous = motion
         let originID = previous?.origin.spaceID ?? presentationSpaceID
@@ -308,7 +330,23 @@ final class SpacePagerViewport<Content: View>: NSView {
         return true
     }
 
-    func advanceFrame(interval: TimeInterval) {
+    func advanceFrame(interval: TimeInterval, frame: CFTimeInterval) {
+        if pendingSlide != nil {
+            // Work left by the update that queued the slide, such as the pages
+            // a finished slide moves into place, goes to the screen first, so
+            // the slide's own commit is light. A newer selection that work
+            // carries starts the slide and queues its own.
+            CATransaction.flush()
+            guard let pending = pendingSlide else { return }
+            pendingSlide = nil
+            // The slide begins at a frame that leaves a frame's room for its
+            // own commit, which a long flush or a tick held back can move on.
+            let period = interval > 0 ? interval : 1.0 / 60
+            let earliest = CACurrentMediaTime() + period
+            let missed = frame < earliest ? ((earliest - frame) / period).rounded(.up) : 0
+            beginPendingSlide(pending, at: frame + missed * period)
+            return
+        }
         guard var current = motion else { return }
         if let destination = current.settledDestination {
             publishPresentation(sampleAnimated: true)
@@ -375,6 +413,7 @@ final class SpacePagerViewport<Content: View>: NSView {
     }
 
     func cancelMotion() {
+        pendingSlide = nil
         stopPresentationSampling()
         generation &+= 1
         motion = nil
@@ -394,7 +433,12 @@ final class SpacePagerViewport<Content: View>: NSView {
             commitsSelection: commitsSelection)
         positionHosts()
         updateAccessibility()
-        settleMotion(to: destination)
+        guard !reduceMotion, window != nil else {
+            settleMotion(to: destination)
+            return
+        }
+        pendingSlide = PendingSlide(destination: destination, heading: nil, step: step, generation: generation)
+        startPresentationSampling()
     }
 
     /// How far the strip moves to show `target` from `origin`: one Space
@@ -409,40 +453,48 @@ final class SpacePagerViewport<Content: View>: NSView {
         return direction == .next ? 1 : -1
     }
 
-    /// Continues the settling slide toward `destination` once the update that
-    /// selected it is on screen. That update can lay out a whole new Space
-    /// before it reaches the screen, and the slide keeps moving meanwhile, so
-    /// a continuation read from its position now would draw the page back by
-    /// the distance covered by then. A slide that finished in the meantime
-    /// slides on from the Space it reached.
-    private func continueSettlingOnScreen(to destination: UUID, from heading: UUID, step: Int) {
-        Task { @MainActor [weak self] in
-            guard let self, self.selectedSpaceID == destination, self.expectedSelection == nil,
-                !self.isInteractionLocked
-            else { return }
-            if !self.continueSettling(to: destination, from: heading, step: step) {
-                guard self.motion == nil, self.presentationSpaceID == heading, !self.reduceMotion else { return }
-                self.prepareHosts(around: destination, retaining: heading, refreshContent: false)
-                self.animate(to: destination, step: step, commitsSelection: false)
-            }
-            // Main-actor work queued behind this can hold the run loop's
-            // commit back while the earlier slide keeps moving on screen. The
-            // continuation starts from where the page is now, so it goes to
-            // the screen now.
-            CATransaction.flush()
+    /// Begins the slide `pending` holds at the display frame `frame`, once the
+    /// commit that readied its pages is behind it, so the frame the slide
+    /// starts at is the first one that shows it. A continuation takes over
+    /// from where the settling slide will be at that frame.
+    private func beginPendingSlide(_ pending: PendingSlide, at frame: CFTimeInterval) {
+        guard motion?.generation == pending.generation,
+            pending.heading == nil
+                || (selectedSpaceID == pending.destination && expectedSelection == nil && !isInteractionLocked),
+            startSlide(pending, at: frame)
+        else { return }
+        // The slide's own commit goes to the screen now, ahead of main-actor
+        // work queued behind this frame.
+        CATransaction.flush()
+    }
+
+    /// Starts the slide `pending` holds at `frame`: on from the settling slide
+    /// for a continuation, from rest otherwise.
+    @discardableResult
+    private func startSlide(_ pending: PendingSlide, at frame: CFTimeInterval) -> Bool {
+        guard let heading = pending.heading else {
+            settleMotion(to: pending.destination, beginningAt: frame)
+            return true
         }
+        return continueSettling(to: pending.destination, from: heading, step: pending.step, at: frame)
     }
 
     /// A selection that arrives while a slide is still settling continues from
     /// what is on screen, starting at the Space that slide was heading to.
     /// Measured from the Space shown before the slide, the next one along
     /// would look two pages away and appear without motion.
-    private func continueSettling(to destination: UUID, from heading: UUID, step: Int) -> Bool {
+    private func continueSettling(
+        to destination: UUID, from heading: UUID, step: Int, at frame: CFTimeInterval
+    ) -> Bool {
         guard !reduceMotion, let current = motion, current.settledDestination == heading,
             let origin = assignment(for: heading), hosts[origin] != nil,
             let target = assignment(for: destination)
         else { return false }
-        let offset = settlingOffset(for: origin, during: current) ?? visibleOffset(for: origin, during: current)
+        // The continuation takes over at `frame`, from where the slide will
+        // be by then, so a commit that misses that frame still meets the
+        // slide where it is.
+        let offset =
+            settlingOffset(for: origin, during: current, at: frame) ?? visibleOffset(for: origin, during: current)
         gesture.cancelCurrentGesture()
         stopPresentationSampling()
         stopHostAnimations()
@@ -457,21 +509,23 @@ final class SpacePagerViewport<Content: View>: NSView {
         prepareHosts(around: heading, retaining: destination, refreshContent: false)
         positionHosts()
         updateAccessibility()
-        settleMotion(to: destination)
+        settleMotion(to: destination, beginningAt: frame)
         return true
     }
 
-    /// Where `key`'s page is now on the settling slide's own curve, timed
-    /// from when Core Animation began it; nil once the page's slide has
+    /// Where `key`'s page is at `time` on the settling slide's own curve,
+    /// timed from when Core Animation began it; nil once the page's slide has
     /// ended. A layer's presentation runs about a frame behind, which is a
     /// visible step at the start of a slide.
-    private func settlingOffset(for key: BrowserSpaceRuntimeAssignment, during current: Motion) -> CGFloat? {
+    private func settlingOffset(
+        for key: BrowserSpaceRuntimeAssignment, during current: Motion, at time: CFTimeInterval
+    ) -> CGFloat? {
         guard let transition = current.transition, bounds.width > 0,
             let slide = hosts[key]?.layer.flatMap(Self.slideAnimation),
             let index = spaces.firstIndex(where: { $0.id == key.spaceID })
         else { return nil }
         // Zero is a slide Core Animation has not committed yet.
-        let elapsed = slide.beginTime > 0 ? CACurrentMediaTime() - slide.beginTime : 0
+        let elapsed = slide.beginTime > 0 ? time - slide.beginTime : 0
         let position = transition.position(after: elapsed)
         let placed = SpacePagerInterpolation.index(index, near: transition.startPosition, count: spaces.count)
         let direction: CGFloat = layoutDirection == .leftToRight ? 1 : -1
@@ -487,7 +541,10 @@ final class SpacePagerViewport<Content: View>: NSView {
         return host.frame.minX
     }
 
-    private func settleMotion(to destination: UUID) {
+    /// Settles the motion on `destination`. The pages and every leaf that
+    /// follows them begin the slide at `start` when given, and otherwise when
+    /// Core Animation commits it.
+    private func settleMotion(to destination: UUID, beginningAt start: CFTimeInterval? = nil) {
         guard var current = motion, assignment(for: destination) != nil else { return }
         let token = current.generation
         let startOffset = visibleOffset(for: current.origin, during: current)
@@ -505,7 +562,7 @@ final class SpacePagerViewport<Content: View>: NSView {
         let transition = SpacePagerSettlement(
             startPosition: CGFloat(originIndex) - startOffset / bounds.width * direction,
             endPosition: CGFloat(originIndex) - targetOffset / bounds.width * direction,
-            generation: token)
+            generation: token, beginTime: start)
         current.transition = transition
         motion = current
         let moving = hosts.filter { key, host in
@@ -637,6 +694,11 @@ final class SpacePagerViewport<Content: View>: NSView {
             assignment(for: current.origin.spaceID) == current.origin,
             let destination, assignment(for: destination) != nil
         else { return }
+        // A continuation still waiting for its frame slides on from the Space
+        // this slide reached instead.
+        let continuation = pendingSlide.flatMap { $0.generation == token && $0.heading != nil ? $0 : nil }
+        if continuation != nil { pendingSlide = nil }
+        defer { if let continuation { slide(on: continuation) } }
         stopPresentationSampling()
         let committedSelection = expectedSelection ?? selectedSpaceID
         motion = nil
@@ -667,6 +729,16 @@ final class SpacePagerViewport<Content: View>: NSView {
             positionHosts()
             updateAccessibility()
         }
+    }
+
+    /// Slides from the Space `pending` was heading to on to its destination,
+    /// once the slide toward that Space has finished.
+    private func slide(on pending: PendingSlide) {
+        guard motion == nil, let heading = pending.heading, presentationSpaceID == heading,
+            selectedSpaceID == pending.destination, expectedSelection == nil, !isInteractionLocked, !reduceMotion
+        else { return }
+        prepareHosts(around: pending.destination, retaining: heading, refreshContent: false)
+        animate(to: pending.destination, step: pending.step, commitsSelection: false)
     }
 
     private func publishPresentation(sampleAnimated: Bool = false) {
@@ -837,9 +909,9 @@ final class SpacePagerViewport<Content: View>: NSView {
 /// Keeps the Objective-C display-link target independent of the generic page root.
 @MainActor
 private final class SpacePagerFrameObserver: NSObject {
-    let update: @MainActor (TimeInterval) -> Void
+    let update: @MainActor (TimeInterval, CFTimeInterval) -> Void
 
-    init(update: @escaping @MainActor (TimeInterval) -> Void) { self.update = update }
+    init(update: @escaping @MainActor (TimeInterval, CFTimeInterval) -> Void) { self.update = update }
 
-    @objc func sample(_ link: CADisplayLink) { update(link.targetTimestamp - link.timestamp) }
+    @objc func sample(_ link: CADisplayLink) { update(link.targetTimestamp - link.timestamp, link.targetTimestamp) }
 }

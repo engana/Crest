@@ -135,12 +135,8 @@ final class SpaceContentPagerView<Content: View & Equatable>: NSView {
                 at: release.startPosition, destination: value.destinationID, refresh: false,
                 preparesNeighbors: false)
             stopAnimations()
-            positionHosts(at: release.startPosition)
             transition = release
-            let moving = hosts.filter { key, host in
-                needsMotion(host, to: origin(for: key, at: release.endPosition, placedNear: release.startPosition))
-            }
-            slide(Array(moving.keys), along: release)
+            slide(along: release)
         } else {
             stopAnimations()
             prepareHosts(
@@ -151,21 +147,20 @@ final class SpaceContentPagerView<Content: View & Equatable>: NSView {
         updateAccessibility()
     }
 
-    /// Moves the pages `keys` name along `release`, with the pager's native
-    /// curve.
-    private func slide(_ keys: [BrowserSpaceRuntimeAssignment], along release: SpacePagerSettlement) {
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = release.duration
-            context.timingFunction = release.timingFunction
-            for key in keys {
-                guard let host = hosts[key] else { continue }
-                let animation = CABasicAnimation()
-                release.configure(animation)
-                animation.fromValue = NSValue(point: origin(for: key, at: release.startPosition))
-                host.animations = ["frameOrigin": animation]
-                host.animator().setFrameOrigin(
-                    origin(for: key, at: release.endPosition, placedNear: release.startPosition))
-            }
+    /// Moves every page along `release`, with the pager's native curve, on
+    /// its layer alone. A page view moved to its end lays its whole page out
+    /// again, which would hold back the commit that starts the slide by
+    /// several frames; the views take their places once the slide settles.
+    private func slide(along release: SpacePagerSettlement) {
+        for (key, host) in hosts {
+            let animation = CABasicAnimation(keyPath: "position")
+            release.configure(animation)
+            animation.fromValue = NSValue(point: origin(for: key, at: release.startPosition))
+            animation.toValue = NSValue(
+                point: origin(for: key, at: release.endPosition, placedNear: release.startPosition))
+            animation.fillMode = .both
+            animation.isRemovedOnCompletion = false
+            host.layer?.add(animation, forKey: "position")
         }
     }
 
@@ -218,8 +213,10 @@ final class SpaceContentPagerView<Content: View & Equatable>: NSView {
         let center = min(spaces.count - 1, max(0, Int(position.rounded())))
         let target = destination.flatMap { id in spaces.firstIndex { $0.id == id } } ?? center
         var visible = Set([Int(position.rounded(.down)), Int(position.rounded(.up)), target])
-        if snapshot?.phase != .idle, let selected = spaces.firstIndex(where: { $0.id == selectedSpaceID }) {
-            // A selection made mid-slide is where the slide goes next.
+        if let selected = spaces.firstIndex(where: { $0.id == selectedSpaceID }) {
+            // A selection is where the strip goes next, mid-slide or before
+            // its slide starts. Its page is built with the selection, so the
+            // slide's own commit is light, even onto a Space across the wrap.
             visible.insert(selected)
         }
         let neighbors = preparesNeighbors ? [target - 1, target + 1, center - 1, center + 1] : []
