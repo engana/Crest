@@ -14,7 +14,7 @@ namespace CrestCore.Native;
 public static class ContractCodec {
     /// <summary>SHA-256 of the canonical contract schema.</summary>
     public static ReadOnlySpan<byte> Fingerprint => [
-        0x4e, 0x98, 0x40, 0x96, 0x04, 0x2c, 0xb7, 0x97, 0x23, 0x4f, 0x6b, 0x96, 0xd4, 0xc0, 0x26, 0x64, 0xcc, 0xc8, 0x0a, 0x29, 0x15, 0x58, 0xfa, 0x2a, 0xe8, 0xc0, 0xce, 0x23, 0xbe, 0x03, 0x03, 0x39
+        0xbd, 0x40, 0x7a, 0xa2, 0x6a, 0x0d, 0x28, 0xe3, 0xef, 0x21, 0x6a, 0x8d, 0x88, 0x1f, 0x40, 0x6d, 0x55, 0x46, 0x71, 0xd2, 0xce, 0xb3, 0xd8, 0x2b, 0x39, 0xe1, 0x55, 0xd9, 0x0e, 0xd3, 0xfc, 0x7c
     ];
 
     /// <summary>SHA-256 of the engine contract alone, which an engine binding registers with.</summary>
@@ -2527,10 +2527,11 @@ public static class ContractCodec {
             case 74: return ReadSiteDecision(reader);
             case 75: return ReadSplitJoinCandidate(reader);
             case 76: return ReadStrongPassword(reader);
-            case 77: return ReadSystemPasswordOffer(reader);
-            case 78: return ReadSystemPasswordWriteThrough(reader);
-            case 79: return ReadTranslationChoice(reader);
-            case 80: return ReadWindowToReopen(reader);
+            case 77: return ReadSwipeNeighbors(reader);
+            case 78: return ReadSystemPasswordOffer(reader);
+            case 79: return ReadSystemPasswordWriteThrough(reader);
+            case 80: return ReadTranslationChoice(reader);
+            case 81: return ReadWindowToReopen(reader);
             default: throw new WireFormatException($"Unknown Query tag {tag}.");
         }
     }
@@ -2847,20 +2848,24 @@ public static class ContractCodec {
                 writer.WriteTag(76);
                 WriteStrongPassword(writer, member);
                 break;
-            case SystemPasswordOffer member:
+            case SwipeNeighbors member:
                 writer.WriteTag(77);
+                WriteSwipeNeighbors(writer, member);
+                break;
+            case SystemPasswordOffer member:
+                writer.WriteTag(78);
                 WriteSystemPasswordOffer(writer, member);
                 break;
             case SystemPasswordWriteThrough member:
-                writer.WriteTag(78);
+                writer.WriteTag(79);
                 WriteSystemPasswordWriteThrough(writer, member);
                 break;
             case TranslationChoice member:
-                writer.WriteTag(79);
+                writer.WriteTag(80);
                 WriteTranslationChoice(writer, member);
                 break;
             case WindowToReopen member:
-                writer.WriteTag(80);
+                writer.WriteTag(81);
                 WriteWindowToReopen(writer, member);
                 break;
             default: throw new ArgumentOutOfRangeException(nameof(value), value.GetType().Name, "Not a contract Query.");
@@ -3531,21 +3536,25 @@ public static class ContractCodec {
                 var answer76 = answers.Query(question);
                 WriteStrongPasswordRecipe(writer, answer76);
                 break;
-            case SystemPasswordOffer question:
+            case SwipeNeighbors question:
                 var answer77 = answers.Query(question);
-                WriteSystemPasswordOfferDecision(writer, answer77);
+                WriteSwipeNeighborTabs(writer, answer77);
+                break;
+            case SystemPasswordOffer question:
+                var answer78 = answers.Query(question);
+                WriteSystemPasswordOfferDecision(writer, answer78);
                 break;
             case SystemPasswordWriteThrough question:
-                var answer78 = answers.Query(question);
-                WriteSystemPasswordWriteThroughSupport(writer, answer78);
+                var answer79 = answers.Query(question);
+                WriteSystemPasswordWriteThroughSupport(writer, answer79);
                 break;
             case TranslationChoice question:
-                var answer79 = answers.Query(question);
-                WriteTranslationDecision(writer, answer79);
+                var answer80 = answers.Query(question);
+                WriteTranslationDecision(writer, answer80);
                 break;
             case WindowToReopen question:
-                var answer80 = answers.Query(question);
-                WriteReopenedWindow(writer, answer80);
+                var answer81 = answers.Query(question);
+                WriteReopenedWindow(writer, answer81);
                 break;
             default: throw new ArgumentOutOfRangeException(nameof(query), query.GetType().Name, "Not a contract Query.");
         }
@@ -16697,6 +16706,7 @@ public static class ContractCodec {
             ReadCredentialPreferences(reader),
             ReadSpaceAccessPolicy(reader),
             reader.ReadBool(),
+            reader.ReadPresence() ? (DateTimeOffset?)reader.ReadDate() : null,
             reader.ReadPresence() ? (DateTimeOffset?)reader.ReadDate() : null);
         _ = ReadSpaceBranding(reader);
         _ = reader.ReadBool();
@@ -16725,6 +16735,12 @@ public static class ContractCodec {
         } else {
             writer.WritePresence(false);
         }
+        if (value.CredentialsEnabledModifiedAt is { } presentCredentialsEnabledModifiedAt) {
+            writer.WritePresence(true);
+            writer.WriteDate(presentCredentialsEnabledModifiedAt);
+        } else {
+            writer.WritePresence(false);
+        }
         WriteSpaceBranding(writer, value.Look);
         writer.WriteBool(value.RequiresAuthentication);
     }
@@ -16740,6 +16756,7 @@ public static class ContractCodec {
             ReadCredentialPreferences(reader),
             ReadSpaceAccessPolicy(reader),
             reader.ReadBool(),
+            reader.ReadPresence() ? (DateTimeOffset?)reader.ReadDate() : null,
             reader.ReadPresence() ? (DateTimeOffset?)reader.ReadDate() : null);
     }
 
@@ -16762,6 +16779,12 @@ public static class ContractCodec {
         if (value.SavedTabsExpansionModifiedAt is { } presentSavedTabsExpansionModifiedAt) {
             writer.WritePresence(true);
             writer.WriteDate(presentSavedTabsExpansionModifiedAt);
+        } else {
+            writer.WritePresence(false);
+        }
+        if (value.CredentialsEnabledModifiedAt is { } presentCredentialsEnabledModifiedAt) {
+            writer.WritePresence(true);
+            writer.WriteDate(presentCredentialsEnabledModifiedAt);
         } else {
             writer.WritePresence(false);
         }
@@ -17433,6 +17456,42 @@ public static class ContractCodec {
         ArgumentNullException.ThrowIfNull(writer);
         ArgumentNullException.ThrowIfNull(value);
         writer.WriteGuid(value.WorkspaceId);
+    }
+
+    public static SwipeNeighborTabs ReadSwipeNeighborTabs(WireReader reader) {
+        ArgumentNullException.ThrowIfNull(reader);
+        return new SwipeNeighborTabs(
+            reader.ReadPresence() ? (Guid?)reader.ReadGuid() : null,
+            reader.ReadPresence() ? (Guid?)reader.ReadGuid() : null);
+    }
+
+    public static void WriteSwipeNeighborTabs(WireWriter writer, SwipeNeighborTabs value) {
+        ArgumentNullException.ThrowIfNull(writer);
+        ArgumentNullException.ThrowIfNull(value);
+        if (value.PreviousTabId is { } presentPreviousTabId) {
+            writer.WritePresence(true);
+            writer.WriteGuid(presentPreviousTabId);
+        } else {
+            writer.WritePresence(false);
+        }
+        if (value.NextTabId is { } presentNextTabId) {
+            writer.WritePresence(true);
+            writer.WriteGuid(presentNextTabId);
+        } else {
+            writer.WritePresence(false);
+        }
+    }
+
+    public static SwipeNeighbors ReadSwipeNeighbors(WireReader reader) {
+        ArgumentNullException.ThrowIfNull(reader);
+        return new SwipeNeighbors(
+            reader.ReadGuid());
+    }
+
+    public static void WriteSwipeNeighbors(WireWriter writer, SwipeNeighbors value) {
+        ArgumentNullException.ThrowIfNull(writer);
+        ArgumentNullException.ThrowIfNull(value);
+        writer.WriteGuid(value.WindowId);
     }
 
     public static SyncJournalChanged ReadSyncJournalChanged(WireReader reader) {

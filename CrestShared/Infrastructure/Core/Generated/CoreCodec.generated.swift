@@ -7,7 +7,7 @@ import Foundation
 enum CoreCodec {
     /// SHA-256 of the canonical contract schema. The core refuses any other.
     static let fingerprint: [UInt8] = [
-        0x4e, 0x98, 0x40, 0x96, 0x04, 0x2c, 0xb7, 0x97, 0x23, 0x4f, 0x6b, 0x96, 0xd4, 0xc0, 0x26, 0x64, 0xcc, 0xc8, 0x0a, 0x29, 0x15, 0x58, 0xfa, 0x2a, 0xe8, 0xc0, 0xce, 0x23, 0xbe, 0x03, 0x03, 0x39
+        0xbd, 0x40, 0x7a, 0xa2, 0x6a, 0x0d, 0x28, 0xe3, 0xef, 0x21, 0x6a, 0x8d, 0x88, 0x1f, 0x40, 0x6d, 0x55, 0x46, 0x71, 0xd2, 0xce, 0xb3, 0xd8, 0x2b, 0x39, 0xe1, 0x55, 0xd9, 0x0e, 0xd3, 0xfc, 0x7c
     ]
     /// SHA-256 of the engine contract alone, which an engine binding registers with.
     static let engineFingerprint: [UInt8] = [
@@ -348,10 +348,11 @@ enum CoreCodec {
         case 74: return try SiteDecision(from: &reader)
         case 75: return try SplitJoinCandidate(from: &reader)
         case 76: return try StrongPassword(from: &reader)
-        case 77: return try SystemPasswordOffer(from: &reader)
-        case 78: return try SystemPasswordWriteThrough(from: &reader)
-        case 79: return try TranslationChoice(from: &reader)
-        case 80: return try WindowToReopen(from: &reader)
+        case 77: return try SwipeNeighbors(from: &reader)
+        case 78: return try SystemPasswordOffer(from: &reader)
+        case 79: return try SystemPasswordWriteThrough(from: &reader)
+        case 80: return try TranslationChoice(from: &reader)
+        case 81: return try WindowToReopen(from: &reader)
         default: throw WireError.malformed("Unknown Query tag \(tag)")
         }
     }
@@ -21473,9 +21474,16 @@ extension SpaceSettings {
         } else {
             savedTabsExpansionModifiedAt = nil
         }
+        let credentialsEnabledModifiedAt: Date?
+        if try reader.readPresence() {
+            let credentialsEnabledModifiedAtValue = try reader.readDate()
+            credentialsEnabledModifiedAt = credentialsEnabledModifiedAtValue
+        } else {
+            credentialsEnabledModifiedAt = nil
+        }
         let look = try SpaceBranding(from: &reader)
         let requiresAuthentication = try reader.readBool()
-        self.init(name: name, symbol: symbol, accent: accent, branding: branding, browsingPreferences: browsingPreferences, credentialPreferences: credentialPreferences, accessPolicy: accessPolicy, isSavedTabsExpanded: isSavedTabsExpanded, savedTabsExpansionModifiedAt: savedTabsExpansionModifiedAt, look: look, requiresAuthentication: requiresAuthentication)
+        self.init(name: name, symbol: symbol, accent: accent, branding: branding, browsingPreferences: browsingPreferences, credentialPreferences: credentialPreferences, accessPolicy: accessPolicy, isSavedTabsExpanded: isSavedTabsExpanded, savedTabsExpansionModifiedAt: savedTabsExpansionModifiedAt, credentialsEnabledModifiedAt: credentialsEnabledModifiedAt, look: look, requiresAuthentication: requiresAuthentication)
     }
 
     func encode(into writer: inout WireWriter) {
@@ -21493,6 +21501,12 @@ extension SpaceSettings {
         accessPolicy.encode(into: &writer)
         writer.writeBool(isSavedTabsExpanded)
         if let present0 = savedTabsExpansionModifiedAt {
+            writer.writePresence(true)
+            writer.writeDate(present0)
+        } else {
+            writer.writePresence(false)
+        }
+        if let present0 = credentialsEnabledModifiedAt {
             writer.writePresence(true)
             writer.writeDate(present0)
         } else {
@@ -21526,7 +21540,14 @@ extension SpaceSettings.Seed {
         } else {
             savedTabsExpansionModifiedAt = nil
         }
-        self.init(name: name, symbol: symbol, accent: accent, branding: branding, browsingPreferences: browsingPreferences, credentialPreferences: credentialPreferences, accessPolicy: accessPolicy, isSavedTabsExpanded: isSavedTabsExpanded, savedTabsExpansionModifiedAt: savedTabsExpansionModifiedAt)
+        let credentialsEnabledModifiedAt: Date?
+        if try reader.readPresence() {
+            let credentialsEnabledModifiedAtValue = try reader.readDate()
+            credentialsEnabledModifiedAt = credentialsEnabledModifiedAtValue
+        } else {
+            credentialsEnabledModifiedAt = nil
+        }
+        self.init(name: name, symbol: symbol, accent: accent, branding: branding, browsingPreferences: browsingPreferences, credentialPreferences: credentialPreferences, accessPolicy: accessPolicy, isSavedTabsExpanded: isSavedTabsExpanded, savedTabsExpansionModifiedAt: savedTabsExpansionModifiedAt, credentialsEnabledModifiedAt: credentialsEnabledModifiedAt)
     }
 
     func encode(into writer: inout WireWriter) {
@@ -21544,6 +21565,12 @@ extension SpaceSettings.Seed {
         accessPolicy.encode(into: &writer)
         writer.writeBool(isSavedTabsExpanded)
         if let present0 = savedTabsExpansionModifiedAt {
+            writer.writePresence(true)
+            writer.writeDate(present0)
+        } else {
+            writer.writePresence(false)
+        }
+        if let present0 = credentialsEnabledModifiedAt {
             writer.writePresence(true)
             writer.writeDate(present0)
         } else {
@@ -22555,6 +22582,62 @@ extension SweepExpiredRecords {
     }
 }
 
+extension SwipeNeighborTabs {
+    init(from reader: inout WireReader) throws(WireError) {
+        let previousTabID: UUID?
+        if try reader.readPresence() {
+            let previousTabIDValue = try reader.readUUID()
+            previousTabID = previousTabIDValue
+        } else {
+            previousTabID = nil
+        }
+        let nextTabID: UUID?
+        if try reader.readPresence() {
+            let nextTabIDValue = try reader.readUUID()
+            nextTabID = nextTabIDValue
+        } else {
+            nextTabID = nil
+        }
+        self.init(previousTabID: previousTabID, nextTabID: nextTabID)
+    }
+
+    func encode(into writer: inout WireWriter) {
+        if let present0 = previousTabID {
+            writer.writePresence(true)
+            writer.writeUUID(present0)
+        } else {
+            writer.writePresence(false)
+        }
+        if let present0 = nextTabID {
+            writer.writePresence(true)
+            writer.writeUUID(present0)
+        } else {
+            writer.writePresence(false)
+        }
+    }
+}
+
+extension SwipeNeighbors {
+    init(from reader: inout WireReader) throws(WireError) {
+        let windowID = try reader.readUUID()
+        self.init(windowID: windowID)
+    }
+
+    func encode(into writer: inout WireWriter) {
+        writer.writeUUID(windowID)
+    }
+
+    func encodeQuery(into writer: inout WireWriter) {
+        writer.writeTag(77)
+        encode(into: &writer)
+    }
+
+    static func decodeAnswer(from reader: inout WireReader) throws(WireError) -> SwipeNeighborTabs {
+        let answer = try SwipeNeighborTabs(from: &reader)
+        return answer
+    }
+}
+
 extension SyncJournalChanged {
     init(from reader: inout WireReader) throws(WireError) {
         let workspaceID = try reader.readUUID()
@@ -22671,7 +22754,7 @@ extension SystemPasswordOffer {
     }
 
     func encodeQuery(into writer: inout WireWriter) {
-        writer.writeTag(77)
+        writer.writeTag(78)
         encode(into: &writer)
     }
 
@@ -22709,7 +22792,7 @@ extension SystemPasswordWriteThrough {
     }
 
     func encodeQuery(into writer: inout WireWriter) {
-        writer.writeTag(78)
+        writer.writeTag(79)
         encode(into: &writer)
     }
 
@@ -23559,7 +23642,7 @@ extension TranslationChoice {
     }
 
     func encodeQuery(into writer: inout WireWriter) {
-        writer.writeTag(79)
+        writer.writeTag(80)
         encode(into: &writer)
     }
 
@@ -24179,7 +24262,7 @@ extension WindowToReopen {
     }
 
     func encodeQuery(into writer: inout WireWriter) {
-        writer.writeTag(80)
+        writer.writeTag(81)
         encode(into: &writer)
     }
 
