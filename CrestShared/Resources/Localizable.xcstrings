@@ -1918,13 +1918,13 @@
     "Agents are turned off in Crest’s settings." : {
 
     },
+    "Agents can open a private window but never reach into one, and see only the name of a locked Space." : {
+
+    },
     "Agents can’t reach this copy of Crest." : {
 
     },
     "Agents can’t use Crest on this device." : {
-
-    },
-    "Agents never reach a private window, and see only the name of a locked Space." : {
 
     },
     "AI Assistant" : {
@@ -3619,7 +3619,7 @@
     "Coding agents and scripts" : {
 
     },
-    "Coding agents on this Mac can read and act on tabs in the Spaces you choose. Crest asks before each new agent connects." : {
+    "Coding agents on this Mac can read and act on tabs and history in the Spaces you choose, and open windows. Crest asks before each new agent connects." : {
 
     },
     "Collapsed" : {
@@ -3976,6 +3976,9 @@
       }
     },
     "Couldn’t Delete Space" : {
+
+    },
+    "Couldn’t Open Crest" : {
 
     },
     "Couldn’t open language downloads." : {
@@ -5074,6 +5077,9 @@
         }
       }
     },
+    "Dim Space colors in dark" : {
+
+    },
     "Dim unloaded tabs" : {
 
     },
@@ -5421,6 +5427,9 @@
           }
         }
       }
+    },
+    "Each device keeps its own default search. Search suggestions send what you type to the search engine." : {
+
     },
     "Each Space gets an independent copy with the permissions you choose. Extension data stays separate." : {
 
@@ -6315,6 +6324,9 @@
         }
       }
     },
+    "Full" : {
+
+    },
     "Full URL" : {
 
     },
@@ -6407,6 +6419,9 @@
           }
         }
       }
+    },
+    "Gray" : {
+
     },
     "Grid" : {
       "localizations" : {
@@ -6719,6 +6734,9 @@
           }
         }
       }
+    },
+    "iCloud Keychain and Passwords choices apply to this device only." : {
+
     },
     "iCloud Keychain, per Space" : {
 
@@ -7455,8 +7473,18 @@
     "Issues" : {
 
     },
-    "It can read and act on tabs in the Spaces you choose in Settings › Agents, and every tab it uses shows its badge." : {
+    "It can read and act on tabs and history in the Spaces you choose in Settings › Agents, and open windows. Every tab it uses shows its badge." : {
 
+    },
+    "It removes every visit to %@ from the %@ Space’s history." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "It removes every visit to %1$@ from the %2$@ Space’s history."
+          }
+        }
+      }
     },
     "Its content is still saved. Update Crest to open it." : {
 
@@ -7477,6 +7505,9 @@
 
     },
     "Keep current password" : {
+
+    },
+    "Keep History" : {
 
     },
     "Keep Loaded" : {
@@ -7668,6 +7699,9 @@
           }
         }
       }
+    },
+    "Let “%@” delete history?" : {
+
     },
     "Let agents run scripts in pages" : {
 
@@ -8515,6 +8549,9 @@
       }
     },
     "No Later Pages" : {
+
+    },
+    "No Link to Open" : {
 
     },
     "No match" : {
@@ -11051,6 +11088,9 @@
     "Route actions" : {
 
     },
+    "Routes apply to links from other apps. The first matching route wins." : {
+
+    },
     "Routing" : {
       "localizations" : {
         "ar" : {
@@ -12076,6 +12116,9 @@
     "Show sidebar" : {
 
     },
+    "Show sidebar on hover in full screen" : {
+
+    },
     "Show Sidebar Temporarily" : {
 
     },
@@ -12244,6 +12287,9 @@
 
     },
     "Smileys & People" : {
+
+    },
+    "Smoke" : {
 
     },
     "Smooth webpage performance" : {
@@ -13092,6 +13138,9 @@
     "Syncing" : {
 
     },
+    "System" : {
+
+    },
     "System passkeys" : {
       "localizations" : {
         "ar" : {
@@ -13399,9 +13448,6 @@
 
     },
     "The file couldn’t be saved in its folder." : {
-
-    },
-    "The first matching route wins." : {
 
     },
     "The original filename used invisible or direction-changing characters that can disguise its real extension." : {
